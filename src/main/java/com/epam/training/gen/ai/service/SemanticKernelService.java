@@ -28,11 +28,11 @@ public class SemanticKernelService {
     public String getSemanticKernelResponse(String prompt) {
         var chatHistory = new ChatHistory();
         chatHistory.addUserMessage(prompt);
-        var response = Objects.requireNonNull(chatCompletionService.getChatMessageContentsAsync(chatHistory, kernel, invocationContext).block())
+        String response = Objects.requireNonNull(chatCompletionService.getChatMessageContentsAsync(chatHistory, kernel, invocationContext).block())
                 .stream()
-                .map(ChatMessageContent::getContent)
                 .findFirst()
-                .orElseThrow(RuntimeException::new);
+                .map(ChatMessageContent::getContent)
+                .orElse("Sorry, I don't know the answer to this question");
         chatHistory.addUserMessage(prompt);
         return response;
     }
