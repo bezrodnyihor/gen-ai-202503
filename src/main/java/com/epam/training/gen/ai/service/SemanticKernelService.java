@@ -1,40 +1,62 @@
 package com.epam.training.gen.ai.service;
 
-
 import com.microsoft.semantickernel.Kernel;
-import com.microsoft.semantickernel.orchestration.InvocationContext;
-import com.microsoft.semantickernel.services.chatcompletion.ChatCompletionService;
+import com.microsoft.semantickernel.orchestration.FunctionResult;
+import com.microsoft.semantickernel.orchestration.PromptExecutionSettings;
+import com.microsoft.semantickernel.semanticfunctions.KernelFunction;
+import com.microsoft.semantickernel.semanticfunctions.KernelFunctionArguments;
 import com.microsoft.semantickernel.services.chatcompletion.ChatHistory;
-import com.microsoft.semantickernel.services.chatcompletion.ChatMessageContent;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.ConcurrentHashMap;
 
-@Service
 @Slf4j
+@Service
 public class SemanticKernelService {
     private final Kernel kernel;
-    private final InvocationContext invocationContext;
-    private final ChatCompletionService chatCompletionService;
 
-    public SemanticKernelService(Kernel kernel, InvocationContext invocationContext, ChatCompletionService chatCompletionService) {
+    private final Map<String, ChatHistory> chatHistoryMap = new ConcurrentHashMap<>();
+    private final Map<String, PromptExecutionSettings> promptExecutionsSettingsMap;
+
+    private static final String SYSTEM_PROMPT = """
+                You are an information assistant providing concise and short answers.
+            """;
+
+    public SemanticKernelService(Kernel kernel, Map<String, PromptExecutionSettings> promptExecutionsSettingsMap) {
         this.kernel = kernel;
-        this.invocationContext = invocationContext;
-        this.chatCompletionService = chatCompletionService;
+        this.promptExecutionsSettingsMap = promptExecutionsSettingsMap;
     }
 
+    public String handleChatRequest(String prompt, String userId) {
+        ChatHistory chatHistory = chatHistoryMap.computeIfAbsent(userId, key -> new ChatHistory(SYSTEM_PROMPT));
 
-    public String getSemanticKernelResponse(String prompt) {
-        var chatHistory = new ChatHistory();
+        FunctionResult<String> response = kernel.invokeAsync(retrieveChatHistory())
+                .withArguments(getKernelFunctionArguments(prompt, chatHistory))
+                .block();
+        if(Objects.isNull(response)){
+            return "Sorry, I can't answer this question";
+        }
+
         chatHistory.addUserMessage(prompt);
-        String response = Objects.requireNonNull(chatCompletionService.getChatMessageContentsAsync(chatHistory, kernel, invocationContext).block())
-                .stream()
-                .findFirst()
-                .map(ChatMessageContent::getContent)
-                .orElse("Sorry, I don't know the answer to this question");
-        chatHistory.addUserMessage(prompt);
-        return response;
+        chatHistory.addAssistantMessage(response.getResult());
+        log.info("response: {}", response.getResult());
+        return response.getResult();
+    }
+    private KernelFunction<String> retrieveChatHistory() {
+        return KernelFunction.<String>createFromPrompt("""
+                        {{$chatHistory}}
+                        <message role="user">{{$request}}</message>""")
+                .withExecutionSettings(promptExecutionsSettingsMap)
+                .build();
     }
 
+    private KernelFunctionArguments getKernelFunctionArguments(String prompt, ChatHistory chatHistory) {
+        return KernelFunctionArguments.builder()
+                .withVariable("request", prompt)
+                .withVariable("chatHistory", chatHistory)
+                .build();
+    }
 }

@@ -15,4 +15,7 @@ final public class PropertyUtility {
 
     @Value("${client-azureopenai-deployment-name}")
     private String modelName;
+
+    @Value("${client-azureopenai-temperature}")
+    private float temperature;
 }
