@@ -18,8 +18,7 @@ public class ChatController {
     public String getSemanticKernelResponse(@RequestParam(value = "prompt",
             defaultValue = "I want to find top-10 books about world history") String prompt,
                                             @RequestParam(value = "userId", defaultValue = "nobody") String userId) {
-        String response = semanticKernelService.handleChatRequest(prompt, userId);
-        return response;
+        return semanticKernelService.handleChatRequest(prompt, userId);
     }
 
 }
